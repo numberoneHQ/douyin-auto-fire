@@ -13,6 +13,7 @@ class PageOperationError(RuntimeError):
 
 
 RETRY_DELAY_MS = 3_000
+SEARCH_RESULT_RETRY_DELAY_MS = 1_500
 
 
 class DouyinChat:
@@ -45,9 +46,18 @@ class DouyinChat:
         await search.click()
         await search.fill("")
         await search.fill(name)
-        await self.page.wait_for_timeout(1_500)
+        await self.page.wait_for_timeout(SEARCH_RESULT_RETRY_DELAY_MS)
 
         result = await self._search_result(name)
+        if result is None:
+            # Some builds only refresh search results after an explicit confirm key.
+            # Trigger one Enter refresh and retry once before failing.
+            try:
+                await search.press("Enter")
+            except Exception:
+                pass
+            await self.page.wait_for_timeout(SEARCH_RESULT_RETRY_DELAY_MS)
+            result = await self._search_result(name)
         if result is None:
             raise PageOperationError("搜索不到目标好友")
         await result.click(force=True)
